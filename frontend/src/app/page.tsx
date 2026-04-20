@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -36,7 +36,8 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchItems = useCallback(async () => {
+  // Used by event handlers — close over current `search` at call time
+  const fetchItems = async () => {
     const url = search
       ? `${API_URL}/items/?search=${encodeURIComponent(search)}`
       : `${API_URL}/items/`;
@@ -44,9 +45,9 @@ export default function Home() {
     const data = await res.json();
     setItems(data);
     setLoading(false);
-  }, [search]);
+  };
 
-  const fetchHealth = useCallback(async () => {
+  const fetchHealth = async () => {
     try {
       const res = await fetch(`${API_URL}/health`);
       const data = await res.json();
@@ -56,17 +57,29 @@ export default function Home() {
       setHealthError(true);
       setHealth(null);
     }
-  }, []);
+  };
+
+  // Effects use .then() so setState is called in a callback, not synchronously
+  useEffect(() => {
+    const url = search
+      ? `${API_URL}/items/?search=${encodeURIComponent(search)}`
+      : `${API_URL}/items/`;
+    fetch(url, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data: Item[]) => { setItems(data); setLoading(false); });
+  }, [search]);
 
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    const doFetch = () =>
+      fetch(`${API_URL}/health`)
+        .then((r) => r.json())
+        .then((data: HealthData) => { setHealth(data); setHealthError(false); })
+        .catch(() => { setHealthError(true); setHealth(null); });
 
-  useEffect(() => {
-    fetchHealth();
-    const interval = setInterval(fetchHealth, 30000);
+    doFetch();
+    const interval = setInterval(doFetch, 30000);
     return () => clearInterval(interval);
-  }, [fetchHealth]);
+  }, []);
 
   const resetForm = () => {
     setEditingItem(null);
