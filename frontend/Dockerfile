@@ -2,10 +2,6 @@ FROM node:22-slim AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-# Install essential build tools and libraries
-RUN apt-get update && apt-get install -y \
-    libc6 \
-    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
@@ -19,12 +15,14 @@ RUN npm install lightningcss-linux-x64-gnu @tailwindcss/oxide-linux-x64-gnu
 
 # Rebuild the source code only when needed
 FROM base AS builder
+# NEXT_PUBLIC_* vars are baked into the bundle at build time, so they must be
+# passed as build args (not runtime env vars) when building the Docker image.
+ARG NEXT_PUBLIC_API_URL=http://localhost:8080
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-
-# Next.js telemetry can be disabled during the build.
-ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
 

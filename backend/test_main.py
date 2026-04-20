@@ -12,7 +12,12 @@ def setup_function():
 def test_health_check():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    data = response.json()
+    assert data["status"] == "ok"
+    assert "version" in data
+    assert "environment" in data
+    assert "item_count" in data
+    assert "uptime_seconds" in data
 
 def test_create_item():
     response = client.post("/items/", json={"name": "Test Item", "description": "This is a test"})
@@ -25,7 +30,7 @@ def test_create_item():
 def test_read_items():
     client.post("/items/", json={"name": "Test Item 1"})
     client.post("/items/", json={"name": "Test Item 2"})
-    
+
     response = client.get("/items/")
     assert response.status_code == 200
     data = response.json()
@@ -58,3 +63,37 @@ def test_delete_item():
     # Verify it's gone
     response = client.get(f"/items/{item_id}")
     assert response.status_code == 404
+
+def test_search_items_by_name():
+    client.post("/items/", json={"name": "Apple", "description": "A red fruit"})
+    client.post("/items/", json={"name": "Banana", "description": "A yellow fruit"})
+
+    response = client.get("/items/?search=apple")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["name"] == "Apple"
+
+def test_search_items_by_description():
+    client.post("/items/", json={"name": "Apple", "description": "A red fruit"})
+    client.post("/items/", json={"name": "Carrot", "description": "An orange vegetable"})
+
+    response = client.get("/items/?search=vegetable")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["name"] == "Carrot"
+
+def test_search_items_no_match():
+    client.post("/items/", json={"name": "Apple"})
+
+    response = client.get("/items/?search=xyz")
+    assert response.status_code == 200
+    assert response.json() == []
+
+def test_health_item_count():
+    client.post("/items/", json={"name": "Item A"})
+    client.post("/items/", json={"name": "Item B"})
+
+    response = client.get("/health")
+    assert response.json()["item_count"] == 2

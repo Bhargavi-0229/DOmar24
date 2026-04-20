@@ -1,7 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
+import time
+
+APP_VERSION = "1.0.0"
+START_TIME = time.time()
 
 app = FastAPI(title="Backend CRUD App")
 
@@ -28,8 +32,15 @@ class Item(ItemCreate):
     id: int
 
 @app.get("/items/", response_model=list[Item])
-def read_items():
-    return list(db.values())
+def read_items(search: str | None = Query(default=None)):
+    items = list(db.values())
+    if search:
+        term = search.lower()
+        items = [
+            i for i in items
+            if term in i.name.lower() or (i.description and term in i.description.lower())
+        ]
+    return items
 
 @app.get("/items/{item_id}", response_model=Item)
 def read_item(item_id: int):
@@ -49,7 +60,7 @@ def create_item(item: ItemCreate):
 def update_item(item_id: int, item: ItemCreate):
     if item_id not in db:
         raise HTTPException(status_code=404, detail="Item not found")
-    
+
     updated_item = Item(id=item_id, **item.model_dump())
     db[item_id] = updated_item
     return updated_item
@@ -61,7 +72,13 @@ def delete_item(item_id: int):
     del db[item_id]
     return {"message": "Item deleted successfully"}
 
-# Health check endpoint for Cloud Run
+# Health check endpoint for Cloud Run — also used as liveness/readiness probe
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "version": APP_VERSION,
+        "environment": os.getenv("ENVIRONMENT", "development"),
+        "item_count": len(db),
+        "uptime_seconds": round(time.time() - START_TIME),
+    }
